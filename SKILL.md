@@ -1,7 +1,7 @@
 ---
 name: skill-usage
 description: Core skills system that manages loading and using other skills through progressive disclosure. Load at startup to enable automatic skill discovery and invocation across all projects.
-version: 1.0.1
+version: 1.0.2
 license: MIT
 ---
 
@@ -52,7 +52,7 @@ Skills are folders of instructions, scripts, and resources that Claude loads dyn
 
 **Available skills** (automatically invoked based on context):
 
-- **skill-usage** (v1.0.0) - Core skills system that manages loading and using other skills through progressive disclosure. Load at startup to enable automatic skill discovery and invocation across all projects.
+- **skill-usage** (v1.0.2) - Core skills system that manages loading and using other skills through progressive disclosure. Load at startup to enable automatic skill discovery and invocation across all projects.
 - **example-skill** (v1.0.0) - [Description from the skill's YAML frontmatter]
 - **another-skill** (v2.1.0) - [Description from the skill's YAML frontmatter]
 
@@ -72,15 +72,71 @@ Skills are folders of instructions, scripts, and resources that Claude loads dyn
 
 This keeps the skills inventory visible and automatically loaded, while full skill content is still loaded progressively when needed.
 
+## Skills System Overview
+
+Skills are reusable, filesystem-based resources that provide Claude with domain-specific expertise: workflows, context, and best practices that transform general-purpose agents into specialists.
+
+**Key benefits:**
+- **Specialize Claude**: Tailor capabilities for domain-specific tasks
+- **Reduce repetition**: Create once, use automatically
+- **Compose capabilities**: Combine Skills to build complex workflows
+
+## How the Filesystem-Based Architecture Works
+
+Skills run in a code execution environment where Claude has filesystem access via bash. Think of it like this:
+
+**Skills exist as directories on a virtual machine.** Claude interacts with them using bash commands - the same way you'd navigate files on your computer.
+
+**Progressive loading through file access:**
+- When a skill is triggered, Claude runs `bash: read skill-name/SKILL.md` to load instructions
+- If instructions reference other files (schemas, examples), Claude reads those via additional bash commands
+- When instructions mention scripts, Claude executes them via bash - **only the output enters context, not the code**
+
+**Why this matters:**
+- A skill can include dozens of reference files, but only those accessed consume tokens
+- Scripts are far more efficient than generating equivalent code on the fly
+- No practical limit on bundled content since unused files cost zero tokens
+
+## Progressive Disclosure: Three Levels
+
+Skills load in three stages, each consuming different amounts of context:
+
+| Level | When Loaded | Token Cost | Content |
+|-------|-------------|------------|---------|
+| **Level 1: Metadata** | Always (at startup) | ~100 tokens per Skill | YAML frontmatter only |
+| **Level 2: Instructions** | When triggered | Under 5k tokens | SKILL.md body with instructions |
+| **Level 3+: Resources** | As needed | Effectively unlimited | Bundled files accessed via filesystem |
+
+**Key insight**: Files don't consume context until accessed. Scripts execute without loading code into context - only their output consumes tokens.
+
+### Level 1: Metadata (Always Loaded)
+
+The Skill's YAML frontmatter provides discovery information. Claude loads this metadata at startup and includes it in the system prompt. This lightweight approach means you can install many Skills without context penalty.
+
+### Level 2: Instructions (Loaded When Triggered)
+
+The main body of SKILL.md contains procedural knowledge: workflows, best practices, and guidance. When you request something that matches a Skill's description, Claude reads SKILL.md from the filesystem via bash. Only then does this content enter the context window.
+
+### Level 3+: Resources and Code (Loaded As Needed)
+
+Skills can bundle additional materials:
+- **Instructions**: Additional markdown files (FORMS.md, REFERENCE.md) containing specialized guidance
+- **Code**: Executable scripts that Claude runs via bash; scripts provide deterministic operations without consuming context
+- **Resources**: Reference materials like database schemas, API documentation, templates, or examples
+
+Claude accesses these files only when referenced. The filesystem model means each content type has different strengths: instructions for flexible guidance, code for reliability, resources for factual lookup.
+
+## Token Economics
+
+Understanding token costs helps plan your skills deployment:
+
+- **Metadata (Level 1)**: ~100 tokens per skill - you can install many skills without penalty
+- **Instructions (Level 2)**: Under 5k tokens - only loaded when skill is triggered
+- **Resources (Level 3+)**: Effectively unlimited - accessed via filesystem without loading into context
+
+**Implication**: Install as many skills as useful. The metadata overhead is minimal, and full content only loads when needed.
+
 ## How Skills Work
-
-### Progressive Disclosure System
-
-Skills load in three stages:
-
-1. **Metadata (YAML frontmatter)**: Always loaded at startup - Claude reads this to determine if a skill is relevant
-2. **Markdown Body**: Loaded when relevant - full instructions from SKILL.md
-3. **Additional Resources**: Loaded as needed - scripts, references, examples
 
 ### Automatic Invocation
 
@@ -107,28 +163,36 @@ Each skill is a directory containing at minimum a `SKILL.md` file:
 ```markdown
 ---
 name: skill-name
-description: Clear description of what this skill does and when to use it (200 char max)
+description: Brief description of what this Skill does and when to use it (max 1024 chars)
 version: 1.0.0  # Optional
 dependencies: package>=1.0.0, other-package>=2.0  # Optional
 ---
 
 # Skill Name
 
-[Instructions, examples, and guidelines that Claude will follow]
+## Instructions
+[Clear, step-by-step guidance for Claude to follow]
 
 ## Examples
-- Example usage 1
-- Example usage 2
+[Concrete examples of using this Skill]
 
 ## Guidelines
-- Guideline 1
-- Guideline 2
+[Best practices and important considerations]
 ```
 
 ### Required Metadata
 
-- **name**: Unique identifier (lowercase, hyphens for spaces, 64 char max)
-- **description**: When to use this skill - **critical** for Claude to know when to invoke it automatically
+- **name**: Unique identifier
+  - Maximum 64 characters
+  - Must contain only lowercase letters, numbers, and hyphens
+  - Cannot contain XML tags
+  - Cannot contain reserved words: "anthropic", "claude"
+  
+- **description**: **Critical for automatic invocation** - should include:
+  - What the skill does
+  - When Claude should use it
+  - Maximum 1024 characters
+  - Cannot contain XML tags
 
 ### Optional Metadata
 
@@ -174,6 +238,62 @@ Usage: python3 .claude/skills/skill-creator/scripts/package_skill.py
 ```
 
 **Common mistake**: Searching for `scripts/package_skill.py` in the project root instead of within the skill's directory structure.
+
+## Runtime Environment Constraints
+
+The execution environment varies by surface. Skills behave differently depending on where they run:
+
+### Claude.ai
+
+- **Network access**: Varies based on user/admin settings
+- May have full, partial, or no internet access
+- Check settings or test if network-dependent functionality is needed
+
+### Claude API
+
+- **No network access**: Skills cannot make external API calls or access the internet
+- **No runtime package installation**: Only pre-installed packages are available
+- **Pre-configured dependencies only**: Check the code execution tool documentation for the list of available packages
+- Cannot install new packages during execution
+
+### Claude Code
+
+- **Full network access**: Skills have the same network access as any other program on the user's computer
+- **Global package installation discouraged**: Skills should only install packages locally to avoid interfering with the user's system
+
+**Impact**: Design skills to work within these constraints or document surface requirements clearly in the skill's description.
+
+## Cross-Surface Availability & Sharing
+
+**Important limitation**: Custom Skills do NOT sync across surfaces.
+
+### Where Skills are Available
+
+Skills uploaded to one surface are not automatically available on others:
+- Skills uploaded to Claude.ai must be separately uploaded to the API
+- API skills are not available on Claude.ai
+- Claude Code skills are filesystem-based and separate from both
+
+You'll need to manage and upload Skills separately for each surface where you want to use them.
+
+### Sharing Scope
+
+Skills have different sharing models depending on where you use them:
+
+**Claude.ai:**
+- Individual user only
+- Each team member must upload separately
+- No centralized admin management or org-wide distribution currently
+
+**Claude API:**
+- Workspace-wide
+- All workspace members can access uploaded Skills
+- Shared organization-wide
+
+**Claude Code:**
+- Personal (`~/.claude/skills/`) or project-based (`.claude/skills/`)
+- Can be shared via Claude Code Plugins
+- Filesystem-based sharing via symlinks
 
 ## Adding New Skills
 
@@ -294,7 +414,17 @@ Claude:
 - User confirmation before installation
 - Single command installation
 
-## Security Review for Untrusted Skills
+## Security: Only Use Trusted Sources
+
+**We strongly recommend using Skills only from trusted sources** - those you created yourself or obtained from Anthropic.
+
+Skills provide Claude with new capabilities through instructions and code. While this makes them powerful, it also means a malicious Skill can direct Claude to invoke tools or execute code in ways that don't match the Skill's stated purpose.
+
+**Think of Skills like installing software**: Only install from sources you trust.
+
+If you must use a Skill from an untrusted or unknown source, exercise extreme caution and thoroughly audit it before use. Depending on what access Claude has when executing the Skill, malicious Skills could lead to data exfiltration, unauthorized system access, or other security risks.
+
+### Security Review for Untrusted Skills
 
 **IMPORTANT**: Skills from untrusted sources can contain prompt injections or malicious instructions. Always review skills before installing them into your project.
 
@@ -327,6 +457,23 @@ Claude:
 - Reports findings and assessment
 - Waits for user approval before installing
 ```
+
+### Key Security Considerations
+
+**Audit thoroughly:**
+- Review all files bundled in the Skill: SKILL.md, scripts, images, and other resources
+- Look for unusual patterns like unexpected network calls, file access patterns, or operations that don't match the Skill's stated purpose
+
+**External sources are risky:**
+- Skills that fetch data from external URLs pose particular risk
+- Fetched content may contain malicious instructions
+- Even trustworthy Skills can be compromised if their external dependencies change over time
+
+**Tool misuse:**
+- Malicious Skills can invoke tools (file operations, bash commands, code execution) in harmful ways
+
+**Data exposure:**
+- Skills with access to sensitive data could be designed to leak information to external systems
 
 ### Prompt Injection Patterns to Watch For
 
@@ -469,12 +616,13 @@ When removing a skill:
 ### Creating Skills
 
 - **Keep it focused**: One workflow per skill, not everything
-- **Clear descriptions**: The description field determines automatic invocation - make it specific
+- **Clear descriptions**: The description field determines automatic invocation - make it specific and include both what the skill does and when to use it
 - **Start simple**: Basic instructions first, add complexity as needed
 - **Use examples**: Show what success looks like with concrete examples
 - **Version control**: Track changes as the skill evolves
 - **Test incrementally**: Test after each significant change
 - **Document dependencies**: List required tools, packages, or other skills
+- **Consider runtime constraints**: Design for the target surface (API, Claude.ai, Claude Code)
 
 ### Using Skills
 
@@ -505,9 +653,11 @@ When removing a skill:
 - Check that `SKILL.md` exists in the skill directory
 - Verify YAML frontmatter is valid (proper format, required fields)
 - Ensure the description clearly indicates when to use the skill
+- Check for XML tags or reserved words in name/description
 
 ### Skill Not Invoked Automatically
 - Review the description field - is it specific enough?
+- Does it include both what the skill does AND when to use it?
 - Try explicit invocation to confirm the skill works
 - Consider if the task actually matches the skill's purpose
 
@@ -516,8 +666,14 @@ When removing a skill:
 - Use explicit invocation to control which skill takes precedence
 - Consider consolidating overlapping skills
 
+### Runtime Issues
+- Check if the skill requires network access (not available in API)
+- Verify required packages are pre-installed in the execution environment
+- Review runtime constraints for your target surface
+
 ## Resources
 
+- Official documentation: https://docs.claude.com/en/docs/agents-and-tools/agent-skills/overview
 - Skills repository: https://github.com/anthropics/skills
 - Creating skills: https://support.claude.com/en/articles/12512198-how-to-create-custom-skills
 - Using skills: https://support.claude.com/en/articles/12512180-using-skills-in-claude
