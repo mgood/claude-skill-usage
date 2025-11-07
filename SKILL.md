@@ -1,7 +1,8 @@
 ---
 name: skill-usage
 description: Core skills system that manages loading and using other skills through progressive disclosure. Load at startup to enable automatic skill discovery and invocation across all projects.
-version: 1.0.0
+version: 1.0.1
+license: MIT
 ---
 
 # Skill Usage System

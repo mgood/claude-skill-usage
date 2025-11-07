@@ -20,10 +20,20 @@ This allows you to build a library of specialized skills that Claude automatical
 
 ## Installation
 
-### For a New Project
+### As a Symlink (Recommended)
 
-1. Copy the `skill-usage` directory to your project's skills folder
-2. Ask Claude to initialize the skills system:
+To share this skill across multiple projects without duplicating:
+
+```bash
+# Clone to a central location
+mkdir -p ~/Projects/skills
+git clone https://github.com/mgood/claude-skill-usage.git ~/Projects/skills/skill-usage
+
+# Symlink to each project
+ln -s ~/Projects/skills/skill-usage <project>/.claude/skills/skill-usage
+```
+
+Then ask Claude to initialize the skills system:
 
 ```
 initialize the skills system described in .claude/skills/skill-usage/
@@ -36,21 +46,28 @@ Claude will automatically:
 
 That's it! The skills system is now active and ready to use.
 
-### As a Symlink (Recommended)
+### Direct Clone
 
-To share this skill across multiple projects:
+To install directly into a single project:
 
 ```bash
-# Create a central skills repository
-mkdir -p ~/Projects/skills
-cp -r skill-usage ~/Projects/skills/
+# Create the skills directory if it doesn't exist
+mkdir -p .claude/skills
 
-# Symlink to each project
-ln -s ~/Projects/skills/skill-usage <project>/.claude/skills/skill-usage
-
-# Then ask Claude to initialize the skills system
-# Claude will detect the symlinked skill and configure it automatically
+# Clone the skill-usage repository
+git clone https://github.com/mgood/claude-skill-usage.git .claude/skills/skill-usage
 ```
+
+### Download ZIP (No Git Required)
+
+If you prefer not to use git:
+
+1. Download the ZIP from GitHub: https://github.com/mgood/claude-skill-usage/archive/refs/heads/main.zip
+2. Extract the ZIP file
+3. Rename the extracted folder from `claude-skill-usage-main` to `skill-usage`
+4. Move it to your project's `.claude/skills/` directory
+
+Note: You'll need to manually download updates with this method.
 
 ## How It Works
 
