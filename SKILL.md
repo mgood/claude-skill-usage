@@ -623,6 +623,8 @@ When removing a skill:
 - **Test incrementally**: Test after each significant change
 - **Document dependencies**: List required tools, packages, or other skills
 - **Consider runtime constraints**: Design for the target surface (API, Claude.ai, Claude Code)
+- **Validation during development**: Use the skill-creator's validation to check skill structure during development (it catches YAML errors, missing fields, etc.)
+- **Packaging is optional**: Skills don't need to be packaged unless explicitly requested - validation is the primary workflow for local development and iteration
 
 ### Using Skills
 
@@ -660,6 +662,25 @@ When removing a skill:
 - Does it include both what the skill does AND when to use it?
 - Try explicit invocation to confirm the skill works
 - Consider if the task actually matches the skill's purpose
+
+### Improving Skill Activation (Self-Improvement)
+
+**When the user has to explicitly remind Claude to use a skill, improve the skill description to prevent this in the future.**
+
+If a user says something like "use the X skill" or "remember to check the X skill", this indicates the skill's description didn't trigger automatically. Take these steps:
+
+1. **Identify the trigger phrase** - What did the user say that should have activated the skill?
+2. **Update the skill description** - Add the user's phrasing (or similar patterns) to the description's trigger phrases
+3. **Add to SKILL.md** - If the skill has a "Trigger Phrases" section, add the new phrase there too
+4. **Confirm the change** - Briefly note what was updated so the user knows the skill will activate better next time
+
+**Example:**
+- User says: "Use the markdown-linked-data skill to add a task"
+- The phrase "add a task" should have triggered the skill
+- Update the description to include "add a task" as a trigger phrase
+- Next time the user says "add a task", the skill activates automatically
+
+**Goal:** Over time, skills should require less explicit invocation as their descriptions learn from actual usage patterns.
 
 ### Conflicts Between Skills
 - Skills should be composable, but conflicts can occur
